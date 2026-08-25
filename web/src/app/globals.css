@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  background: #0A0A0B;
+  color: #EDEDF0;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+.card {
+  @apply rounded-xl border border-border bg-panel;
+}
+
+.subtle {
+  @apply text-muted text-sm;
+}
+
+.pill {
+  @apply inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs;
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+}
