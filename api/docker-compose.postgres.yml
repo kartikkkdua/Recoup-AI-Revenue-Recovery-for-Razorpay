@@ -1,0 +1,28 @@
+# Local Postgres for the migration proof. Usage:
+#
+#   docker compose -f docker-compose.postgres.yml up -d
+#   DATABASE_URL=postgresql+asyncpg://recoup:recoup@localhost:5433/recoup \
+#     uvicorn app.main:app --reload --port 8080
+#
+# Everything else — models, migrations, tests — is storage-agnostic because
+# SQLAlchemy async engine handles both dialects. This proves the design.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: recoup-postgres
+    environment:
+      POSTGRES_USER: recoup
+      POSTGRES_PASSWORD: recoup
+      POSTGRES_DB: recoup
+    ports:
+      - "5433:5432"
+    volumes:
+      - recoup_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recoup -d recoup"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  recoup_pgdata:

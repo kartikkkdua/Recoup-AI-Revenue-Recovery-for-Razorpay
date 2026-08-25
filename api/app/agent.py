@@ -20,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import bandit as bandit_mod
 from app import features as features_mod
 from app import memory as memory_mod
+from app import tracing
+from app import uplift as uplift_mod
 from app.classifier import classify
 from app.config import settings
 from app.db import (
@@ -72,6 +74,14 @@ def _audit(session: AsyncSession, recovery_id: int, step: str, actor: str, detai
 
 
 async def handle_event(event_row_id: int, *, mode: str = "agent") -> None:
+    tracer = tracing.get_tracer()
+    with tracer.start_as_current_span(
+        "agent.handle_event", attributes={"event_row_id": event_row_id, "mode": mode}
+    ):
+        await _handle_event_inner(event_row_id, mode=mode, tracer=tracer)
+
+
+async def _handle_event_inner(event_row_id: int, *, mode: str, tracer) -> None:
     async with SessionLocal() as session:
         event = await session.get(WebhookEvent, event_row_id)
         if not event:
@@ -103,7 +113,11 @@ async def handle_event(event_row_id: int, *, mode: str = "agent") -> None:
                {"event_type": event.event_type, "payment_id": payment.get("id"),
                 "simulated": simulated, "mode": mode})
 
-        classification = await classify(payment)
+        with tracer.start_as_current_span("agent.classify") as sp:
+            classification = await classify(payment)
+            sp.set_attribute("cohort", classification.cohort.value)
+            sp.set_attribute("source", classification.source)
+            sp.set_attribute("confidence", classification.confidence)
         recovery.cohort = classification.cohort.value
         _audit(session, recovery.id, "classified", classification.source, {
             "cohort": classification.cohort.value,
@@ -125,12 +139,28 @@ async def handle_event(event_row_id: int, *, mode: str = "agent") -> None:
                 return
 
         # ML pipeline: features → semantic memory → contextual bandit → strategy
+        # Gated by uplift model: if predicted ITE < threshold, skip and save fees.
         ml_meta: dict[str, Any] | None = None
         if mode == "naive":
             strategy = build_naive_strategy(classification.cohort)
         elif settings.use_ml and classification.cohort not in {
             FailureCohort.RISK_DECLINED.value, FailureCohort.UNKNOWN.value,
         }:
+            # Uplift gate — cheapest, run first
+            up_pred = uplift_mod.predict(
+                cohort=classification.cohort.value,
+                amount_paise=recovery.amount_paise,
+            )
+            if up_pred is not None and not up_pred.should_intervene:
+                recovery.status = RecoveryStatus.SKIPPED.value
+                _audit(session, recovery.id, "uplift_below_threshold", "uplift", {
+                    "p_agent": up_pred.p_agent, "p_naive": up_pred.p_naive,
+                    "ite": up_pred.ite, "threshold": up_pred.threshold,
+                    "reason": "uplift model predicts intervention won't pay off — skipping to save gateway fees",
+                })
+                await session.commit()
+                return
+
             feats = await features_mod.compute_features(
                 session, customer_id=recovery.merchant_customer_id,
                 cohort=classification.cohort.value, amount_paise=recovery.amount_paise,
@@ -209,6 +239,11 @@ async def handle_event(event_row_id: int, *, mode: str = "agent") -> None:
                     "considered": decision.considered,
                     **ml_meta_extra,
                 },
+                "uplift": (None if up_pred is None else {
+                    "p_agent": up_pred.p_agent, "p_naive": up_pred.p_naive,
+                    "ite": up_pred.ite, "threshold": up_pred.threshold,
+                    "intervened_because_above_threshold": True,
+                }),
             }
         else:
             strategy = await build_strategy(classification.cohort, session)
@@ -243,7 +278,12 @@ async def handle_event(event_row_id: int, *, mode: str = "agent") -> None:
         # ordered a Razorpay round-trip against a durable row, but since we
         # never expose mid-execution state to another process, it just cost
         # us an extra fsync per event. 2 → 1 commit = 2x throughput on WAL.
-        outcome = await _execute(session, recovery, strategy, simulated=simulated, mode=mode)
+        with tracer.start_as_current_span("agent.execute", attributes={
+            "action": strategy.action, "cohort": recovery.cohort,
+            "amount_paise": recovery.amount_paise,
+        }) as sp:
+            outcome = await _execute(session, recovery, strategy, simulated=simulated, mode=mode)
+            sp.set_attribute("outcome", outcome.value)
         recovery.status = outcome.value
         await session.commit()
 

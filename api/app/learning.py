@@ -8,9 +8,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app._upsert import insert as _insert
 from app.db import LearnedOutcome
 
 
@@ -26,7 +26,7 @@ async def record_outcome(
     session: AsyncSession, *, cohort: str, action: str, success: bool
 ) -> None:
     hour = _ist_hour_now()
-    stmt = sqlite_insert(LearnedOutcome).values(
+    stmt = _insert(LearnedOutcome).values(
         cohort=cohort,
         action=action,
         hour_ist=hour,

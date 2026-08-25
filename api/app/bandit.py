@@ -20,8 +20,9 @@ from dataclasses import dataclass
 
 import numpy as np
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app._upsert import insert as _insert
 
 from app.db import BanditArm, FailureCohort
 
@@ -136,7 +137,7 @@ async def update(session: AsyncSession, *, cohort: str, amount_paise: int,
     hour = hour_bucket_ist(hour_ist)
     a, b = PRIOR_TABLE.get((cohort, action), (1.0, 1.0))
 
-    stmt = sqlite_insert(BanditArm).values(
+    stmt = _insert(BanditArm).values(
         cohort=cohort, ticket_bucket=ticket, hour_bucket=hour, action=action,
         alpha=a + (1.0 if success else 0.0),
         beta=b + (0.0 if success else 1.0),

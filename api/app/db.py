@@ -155,7 +155,13 @@ class RecoveryMemory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
-engine = create_async_engine(settings.database_url, echo=False, future=True)
+_engine_kwargs: dict = {"echo": False, "future": True}
+if settings.database_url.startswith("postgresql"):
+    _engine_kwargs["pool_size"] = 20
+    _engine_kwargs["max_overflow"] = 10
+    _engine_kwargs["pool_pre_ping"] = True
+
+engine = create_async_engine(settings.database_url, **_engine_kwargs)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 

@@ -3,15 +3,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import logging_setup
+from app import logging_setup, tracing
 from app.config import settings
 from app.db import init_db
-from app.routers import causal, metrics, prom, recoveries, roi, rules, simulator, stream, subscriptions, webhooks
+from app.routers import causal, metrics, prom, recoveries, roi, rules, simulator, stream, subscriptions, traces, uplift, webhooks
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     logging_setup.configure(json_output=False)  # flip to True in production
+    tracing.configure()
     await init_db()
     yield
 
@@ -47,6 +48,8 @@ app.include_router(stream.router, prefix="/api/stream", tags=["stream"])
 app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["subscriptions"])
 app.include_router(prom.router, prefix="/metrics", tags=["prometheus"])
 app.include_router(causal.router, prefix="/api/causal", tags=["causal"])
+app.include_router(uplift.router, prefix="/api/uplift", tags=["uplift"])
+app.include_router(traces.router, prefix="/api/traces", tags=["traces"])
 
 
 @app.get("/health")
