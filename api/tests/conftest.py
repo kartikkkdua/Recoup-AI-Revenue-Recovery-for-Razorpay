@@ -30,4 +30,10 @@ async def _fresh_db():
     rate_limiter._denials = 0
     duplicate_counter._n = 0
 
+    # Reset module-level ML caches so trained models from prior tests don't leak
+    import app.uplift as _u
+    import app.conformal as _c
+    _u._model = None
+    _c._calib = None
+
     yield

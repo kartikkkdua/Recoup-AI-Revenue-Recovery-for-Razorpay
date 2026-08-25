@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import logging_setup, tracing
 from app.config import settings
 from app.db import init_db
-from app.routers import causal, metrics, prom, recoveries, roi, rules, simulator, stream, subscriptions, traces, uplift, webhooks
+from app.routers import advanced, causal, metrics, prom, recoveries, roi, rules, simulator, stream, subscriptions, traces, uplift, webhooks
 
 
 @asynccontextmanager
@@ -50,6 +50,7 @@ app.include_router(prom.router, prefix="/metrics", tags=["prometheus"])
 app.include_router(causal.router, prefix="/api/causal", tags=["causal"])
 app.include_router(uplift.router, prefix="/api/uplift", tags=["uplift"])
 app.include_router(traces.router, prefix="/api/traces", tags=["traces"])
+app.include_router(advanced.router, prefix="/api", tags=["advanced-ml"])
 
 
 @app.get("/health")

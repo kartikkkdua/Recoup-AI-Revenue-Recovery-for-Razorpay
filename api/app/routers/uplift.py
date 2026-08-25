@@ -4,7 +4,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import uplift
+from app import conformal, uplift
 from app.db import get_session
 
 router = APIRouter()
@@ -39,4 +39,7 @@ async def predict(
     p = uplift.predict(cohort=cohort, amount_paise=amount_paise, hour_ist=hour_ist)
     if p is None:
         raise HTTPException(status_code=400, detail="prediction failed (unknown features?)")
-    return asdict(p)
+    body = asdict(p)
+    # Overlay conformal + isotonic calibration if available
+    body["conformal"] = conformal.apply_to_prediction(p.p_agent, p.p_naive, p.ite)
+    return body
