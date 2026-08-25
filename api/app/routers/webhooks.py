@@ -2,6 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import logging_setup
 from app.agent import handle_event
 from app.closer import CLOSE_EVENT_TYPES, handle_close_event
 from app.config import settings
@@ -33,6 +34,8 @@ async def receive(
     event_type = payload.get("event") or "unknown"
     if not event_id:
         raise HTTPException(status_code=400, detail="missing event id")
+
+    logging_setup.set_context(event_id=event_id)
 
     existing = await session.scalar(
         select(WebhookEvent).where(WebhookEvent.razorpay_event_id == event_id)

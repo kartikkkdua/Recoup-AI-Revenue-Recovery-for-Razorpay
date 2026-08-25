@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Activity, GaugeCircle, ListChecks, Settings, Sliders, Calculator, Repeat } from "lucide-react";
+import { Activity, GaugeCircle, ListChecks, Settings, Sliders, Calculator, Repeat, FlaskConical } from "lucide-react";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: GaugeCircle },
   { href: "/recoveries", label: "Recoveries", icon: ListChecks },
   { href: "/subscriptions", label: "Subscriptions", icon: Repeat },
+  { href: "/impact", label: "Causal Impact", icon: FlaskConical },
   { href: "/rules", label: "Rules", icon: Sliders },
   { href: "/roi", label: "ROI", icon: Calculator },
   { href: "/settings", label: "Settings", icon: Settings },

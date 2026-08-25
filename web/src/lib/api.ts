@@ -128,6 +128,26 @@ export const api = {
   subscriptionSummary: (hours = 24 * 30) => req<SubscriptionSummary>(`/api/subscriptions/summary?hours=${hours}`),
   subscriptionList: (limit = 50) => req<{ items: SubscriptionRow[] }>(`/api/subscriptions?limit=${limit}`),
   driftAlerts: () => req<{ alerts: DriftAlert[] }>(`/api/metrics/drift`),
+  ate: () => req<ATE>(`/api/causal/ate`),
+  cate: () => req<{ slices: CATESlice[]; n_slices: number; n_significant: number }>(`/api/causal/cate`),
+};
+
+export type ATE = {
+  available: boolean;
+  reason?: string;
+  n_agent?: number; n_naive?: number;
+  p_agent?: number; p_naive?: number;
+  ate_raw?: number; ate_stratified?: number; se_stratified?: number;
+  ci_low?: number; ci_high?: number;
+  lift_multiple?: number; slices_used?: number;
+};
+
+export type CATESlice = {
+  cohort: string; ticket_bucket: string;
+  n_agent: number; n_naive: number;
+  p_agent: number; p_naive: number;
+  cate: number; se: number; ci_low: number; ci_high: number;
+  significant: boolean;
 };
 
 export type SubscriptionSummary = {
