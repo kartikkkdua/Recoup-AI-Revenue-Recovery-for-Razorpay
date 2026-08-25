@@ -115,6 +115,46 @@ class LearnedOutcome(Base):
     succeeded: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class BanditArm(Base):
+    """Beta(α, β) posterior for a contextual bandit arm.
+
+    One row per (cohort, ticket_bucket, hour_bucket, action). Thompson sampling
+    at decision time draws p ~ Beta(α, β) for each candidate action and picks
+    argmax. On outcome we increment α or β. Cold cohorts are bootstrapped from
+    hardcoded priors so the first few decisions are still sensible.
+    """
+    __tablename__ = "bandit_arms"
+    __table_args__ = (UniqueConstraint("cohort", "ticket_bucket", "hour_bucket", "action",
+                                       name="uq_bandit_arm"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cohort: Mapped[str] = mapped_column(String(32), index=True)
+    ticket_bucket: Mapped[str] = mapped_column(String(16), index=True)  # small|mid|large
+    hour_bucket: Mapped[str] = mapped_column(String(16), index=True)    # morning|day|evening|night
+    action: Mapped[str] = mapped_column(String(32), index=True)
+    alpha: Mapped[float] = mapped_column(default=1.0)  # successes + prior
+    beta: Mapped[float] = mapped_column(default=1.0)   # failures + prior
+    pulls: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class RecoveryMemory(Base):
+    """Semantic memory: per-recovery TF-IDF text + outcome + strategy used.
+
+    On a new failure, retrieve k-nearest past successful recoveries by cosine
+    similarity and use the distribution of what worked for them as an
+    additional prior. This is RAG-for-actions on the merchant's own history.
+    """
+    __tablename__ = "recovery_memory"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recovery_id: Mapped[int] = mapped_column(ForeignKey("recoveries.id", ondelete="CASCADE"), index=True)
+    cohort: Mapped[str] = mapped_column(String(32), index=True)
+    text: Mapped[str] = mapped_column(String(1024))
+    action_taken: Mapped[str] = mapped_column(String(32))
+    succeeded: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
 engine = create_async_engine(settings.database_url, echo=False, future=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 

@@ -55,6 +55,18 @@ export type DecisionContext = {
     prior?: number; learned_blended?: number;
     observed_attempts?: number; observed_p?: number;
   } | null;
+  ml: {
+    features: {
+      customer_ltv_paise: number; customer_failure_streak: number;
+      customer_preferred_rail: string | null; cohort_recent_recovery_rate: number;
+      hour_ist: number; ticket_bucket: string; is_high_value: boolean;
+    };
+    memory_hits: number;
+    memory_action_scores: Record<string, number>;
+    bandit_chosen: string;
+    bandit_sampled_p: number;
+    bandit_context: { cohort: string; ticket_bucket: string; hour_bucket: string };
+  } | null;
   gate_triggered: { step: string; [k: string]: unknown } | null;
   strategy_reason: string | null;
 };

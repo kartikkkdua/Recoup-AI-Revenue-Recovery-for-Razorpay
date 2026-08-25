@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import Recovery, RecoveryStatus, get_session
+from app import bandit as bandit_mod
+from app.db import Recovery, RecoveryMemory, RecoveryStatus, get_session
 from app.learning import all_learned_rates
 from app.reliability import duplicate_counter, rate_limiter, razorpay_circuit
 
@@ -24,6 +25,33 @@ async def reliability(session: AsyncSession = Depends(get_session)):
 async def learned(session: AsyncSession = Depends(get_session)):
     rows = await all_learned_rates(session)
     return {"rows": rows}
+
+
+@router.get("/bandit")
+async def bandit(session: AsyncSession = Depends(get_session)):
+    arms = await bandit_mod.snapshot(session)
+    return {
+        "arms": arms,
+        "total_pulls": sum(a["pulls"] for a in arms),
+        "n_arms": len(arms),
+    }
+
+
+@router.get("/memory")
+async def memory(session: AsyncSession = Depends(get_session)):
+    total = await session.scalar(select(func.count(RecoveryMemory.id)))
+    succ = await session.scalar(select(func.count(RecoveryMemory.id))
+                                 .where(RecoveryMemory.succeeded.is_(True)))
+    by_cohort = (await session.execute(
+        select(RecoveryMemory.cohort, func.count(RecoveryMemory.id))
+        .where(RecoveryMemory.succeeded.is_(True))
+        .group_by(RecoveryMemory.cohort)
+    )).all()
+    return {
+        "total_records": int(total or 0),
+        "successful_records": int(succ or 0),
+        "by_cohort": {c: int(n) for c, n in by_cohort},
+    }
 
 
 @router.get("/drift")

@@ -17,7 +17,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import bandit as bandit_mod
+from app import features as features_mod
+from app import memory as memory_mod
 from app.classifier import classify
+from app.config import settings
 from app.db import (
     AuditEntry,
     FailureCohort,
@@ -29,7 +33,7 @@ from app.db import (
 from app.learning import learned_p, record_outcome
 from app.razorpay_client import CircuitOpenError, client
 from app.reliability import is_low_success_hour_ist, next_favorable_hour_ist, rate_limiter
-from app.strategist import Strategy, build_naive_strategy, build_strategy, to_dict
+from app.strategist import DEFAULT_STRATEGIES, Strategy, build_naive_strategy, build_strategy, to_dict
 
 FEE_RETRY_ATTEMPT = 200
 FEE_PAYMENT_LINK = 100
@@ -120,10 +124,95 @@ async def handle_event(event_row_id: int, *, mode: str = "agent") -> None:
                 await session.commit()
                 return
 
+        # ML pipeline: features → semantic memory → contextual bandit → strategy
+        ml_meta: dict[str, Any] | None = None
         if mode == "naive":
             strategy = build_naive_strategy(classification.cohort)
+        elif settings.use_ml and classification.cohort not in {
+            FailureCohort.RISK_DECLINED.value, FailureCohort.UNKNOWN.value,
+        }:
+            feats = await features_mod.compute_features(
+                session, customer_id=recovery.merchant_customer_id,
+                cohort=classification.cohort.value, amount_paise=recovery.amount_paise,
+            )
+            mem = await memory_mod.retrieve(
+                session, cohort=classification.cohort.value,
+                text=recovery.original_error_description or "",
+                k=5,
+            )
+            # Semantic-memory bias: if memory strongly recommends a specific
+            # action (>60% weighted vote among ≥3 hits), we bump that arm's
+            # posterior *before* the bandit samples. Otherwise pure Thompson.
+            bandit_bias_action = None
+            if len(mem.hits) >= 3:
+                top_action, top_score = max(mem.action_scores.items(), key=lambda kv: kv[1])
+                if top_score >= 0.60:
+                    bandit_bias_action = top_action
+            decision = await bandit_mod.choose(
+                session, cohort=classification.cohort.value,
+                amount_paise=recovery.amount_paise, hour_ist=feats.hour_ist,
+            )
+            # If memory strongly disagreed with the bandit's pick and had high
+            # confidence, override to the memory pick. This is the RAG-for-
+            # actions kick: history beats prior on strong evidence.
+            if bandit_bias_action and bandit_bias_action != decision.action \
+               and bandit_bias_action in {c["action"] for c in decision.considered}:
+                overridden_from = decision.action
+                # Rebuild a decision pointing at the memory choice
+                chosen = next(c for c in decision.considered if c["action"] == bandit_bias_action)
+                decision = bandit_mod.BanditDecision(
+                    action=bandit_bias_action,
+                    sampled_p=chosen["sampled_p"],
+                    arm_alpha=chosen["alpha"], arm_beta=chosen["beta"],
+                    arm_pulls=chosen["pulls"], context=decision.context,
+                    considered=decision.considered,
+                )
+                ml_meta_extra = {"memory_override_from": overridden_from}
+            else:
+                ml_meta_extra = {}
+
+            # Materialize the chosen strategy from the default strategist,
+            # substituting the bandit's action selection.
+            base = DEFAULT_STRATEGIES.get(FailureCohort(classification.cohort.value),
+                                          DEFAULT_STRATEGIES[FailureCohort.UNKNOWN])
+            # If bandit picked an action that the default cohort doesn't map
+            # to, we still need a valid Strategy — grab any DEFAULT that uses
+            # that action, or fall back to base.
+            strategy = None
+            if decision.action == base.action:
+                strategy = base
+            else:
+                for cohort_key, s in DEFAULT_STRATEGIES.items():
+                    if s.action == decision.action:
+                        strategy = Strategy(
+                            action=s.action, rails=list(s.rails),
+                            backoff_seconds=list(s.backoff_seconds),
+                            max_attempts=s.max_attempts,
+                            dunning_channels=list(s.dunning_channels),
+                            payday_windows_hours=list(s.payday_windows_hours),
+                            reason=s.reason + " (bandit-chosen)",
+                        )
+                        break
+            if strategy is None:
+                strategy = base
+            ml_meta = {
+                "features": feats.to_dict(),
+                "memory": mem.to_dict(),
+                "bandit": {
+                    "chosen_action": decision.action,
+                    "sampled_p": decision.sampled_p,
+                    "arm": {"alpha": decision.arm_alpha, "beta": decision.arm_beta,
+                            "pulls": decision.arm_pulls,
+                            "posterior_mean": decision.arm_alpha /
+                                (decision.arm_alpha + decision.arm_beta)},
+                    "context": decision.context,
+                    "considered": decision.considered,
+                    **ml_meta_extra,
+                },
+            }
         else:
             strategy = await build_strategy(classification.cohort, session)
+
         strategy_dict = to_dict(strategy)
         # Stash the incoming notes on the strategy dict (prefixed with _) so
         # the executor can reach them without another DB round-trip. Never
@@ -133,10 +222,22 @@ async def handle_event(event_row_id: int, *, mode: str = "agent") -> None:
             "email": notes.get("email"),
             "name": notes.get("name"),
         }
+        if ml_meta:
+            strategy_dict["_ml"] = ml_meta
         recovery.strategy = strategy_dict
+        public_strategy = {k: v for k, v in strategy_dict.items() if not k.startswith("_")}
         _audit(session, recovery.id, "strategy_chosen", "strategist",
-               {"strategy": {k: v for k, v in strategy_dict.items() if not k.startswith("_")},
-                "mode": mode})
+               {"strategy": public_strategy, "mode": mode,
+                "ml_used": ml_meta is not None})
+        if ml_meta:
+            _audit(session, recovery.id, "ml_decision", "bandit", {
+                "features": ml_meta["features"],
+                "memory_hits": ml_meta["memory"]["n_hits"],
+                "memory_action_scores": ml_meta["memory"]["action_scores"],
+                "bandit_chosen": ml_meta["bandit"]["chosen_action"],
+                "bandit_sampled_p": ml_meta["bandit"]["sampled_p"],
+                "bandit_context": ml_meta["bandit"]["context"],
+            })
 
         # Single commit per recovery — the interim commit here previously
         # ordered a Razorpay round-trip against a durable row, but since we
@@ -248,6 +349,13 @@ async def _execute(
         p, obs_n, raw = await learned_p(session, cohort=cohort, action=strategy.action, prior=prior)
         success = random.random() < p
         await record_outcome(session, cohort=cohort, action=strategy.action, success=success)
+        if mode == "agent" and settings.use_ml:
+            await bandit_mod.update(session, cohort=cohort, amount_paise=recovery.amount_paise,
+                                    hour_ist=(datetime.now(timezone.utc).hour + 5) % 24,
+                                    action=strategy.action, success=success)
+            await memory_mod.record(session, recovery_id=recovery.id, cohort=cohort,
+                                    text=recovery.original_error_description or "",
+                                    action_taken=strategy.action, succeeded=success)
         _audit(session, recovery.id, "decision_probability", "strategist", {
             "prior": prior, "learned_blended": p,
             "observed_attempts": obs_n, "observed_p": raw,
@@ -306,6 +414,15 @@ async def _do_retries(
         success = random.random() < p
         if mode == "agent":
             await record_outcome(session, cohort=recovery.cohort, action=learn_action, success=success)
+            if settings.use_ml:
+                await bandit_mod.update(session, cohort=recovery.cohort,
+                                        amount_paise=recovery.amount_paise,
+                                        hour_ist=(datetime.now(timezone.utc).hour + 5) % 24,
+                                        action=learn_action, success=success)
+                await memory_mod.record(session, recovery_id=recovery.id,
+                                        cohort=recovery.cohort,
+                                        text=recovery.original_error_description or "",
+                                        action_taken=learn_action, succeeded=success)
         if success:
             recovery.recovered_amount_paise = recovery.amount_paise
             _audit(session, recovery.id, "recovered", "executor",

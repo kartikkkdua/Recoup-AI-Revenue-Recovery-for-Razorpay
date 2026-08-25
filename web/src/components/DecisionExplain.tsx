@@ -41,6 +41,37 @@ export function DecisionExplain({ ctx }: { ctx: DecisionContext }) {
             {gate.reason ? <> {String(gate.reason)}</> : null}
           </Line>
         )}
+        {ctx.ml && (
+          <div className="mt-3 border-t border-border pt-3">
+            <div className="text-xs uppercase tracking-wider text-muted mb-2">
+              ML pipeline — contextual bandit + semantic memory
+            </div>
+            <Line>
+              <span className="pill text-accent">bandit</span>{" "}
+              Sampled <b>{ctx.ml.bandit_chosen}</b> at p={pct(ctx.ml.bandit_sampled_p)}
+              {" "}for context ({ctx.ml.bandit_context.ticket_bucket} ticket ·
+              {" "}{ctx.ml.bandit_context.hour_bucket} IST).
+            </Line>
+            <Line>
+              <span className="pill">features</span>{" "}
+              LTV ₹{(ctx.ml.features.customer_ltv_paise / 100).toLocaleString("en-IN")} ·
+              {" "}streak {ctx.ml.features.customer_failure_streak} ·
+              {" "}preferred rail: <span className="text-text">{ctx.ml.features.customer_preferred_rail ?? "—"}</span> ·
+              {" "}cohort 24h rate {pct(ctx.ml.features.cohort_recent_recovery_rate)}
+            </Line>
+            {ctx.ml.memory_hits > 0 && (
+              <Line>
+                <span className="pill text-good">memory</span>{" "}
+                Retrieved <b>{ctx.ml.memory_hits}</b> similar past successes ·
+                {" "}top action votes:{" "}
+                {Object.entries(ctx.ml.memory_action_scores)
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 2)
+                  .map(([a, s]) => `${a} (${pct(s)})`).join(", ")}
+              </Line>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

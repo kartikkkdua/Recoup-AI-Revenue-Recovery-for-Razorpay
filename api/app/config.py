@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./recoup.db"
     cors_origin: str = "http://localhost:3000"
     llm_model: str = "gemini-2.0-flash"
+    # Toggle the ML pipeline (contextual bandit + feature store + semantic
+    # memory). Off by default so the deterministic rules-only baseline stays
+    # reachable for the panel comparison.
+    use_ml: bool = True
 
 
 settings = Settings()

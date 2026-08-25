@@ -59,6 +59,7 @@ async def get_recovery(
     # when they click into a recovery.
     classify_audit = next((a for a in r.audit if a.step == "classified"), None)
     decision_audit = next((a for a in r.audit if a.step == "decision_probability"), None)
+    ml_audit = next((a for a in r.audit if a.step == "ml_decision"), None)
     gate_audit = next(
         (a for a in r.audit if a.step in {"rate_limited", "deferred_low_success_window",
                                           "circuit_open_deferred"}),
@@ -67,6 +68,7 @@ async def get_recovery(
     decision_context = {
         "classification": (classify_audit.detail if classify_audit else None),
         "probability": (decision_audit.detail if decision_audit else None),
+        "ml": (ml_audit.detail if ml_audit else None),
         "gate_triggered": ({"step": gate_audit.step, **gate_audit.detail} if gate_audit else None),
         "strategy_reason": (r.strategy or {}).get("reason"),
     }
