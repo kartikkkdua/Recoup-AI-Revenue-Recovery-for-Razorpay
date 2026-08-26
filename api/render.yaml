@@ -1,0 +1,48 @@
+# Render blueprint — one-click deploy the FastAPI backend + Postgres.
+#
+# Push this file to GitHub, then in the Render dashboard:
+#   New → Blueprint → connect repo → Apply
+#
+# Render will provision the web service + the managed Postgres, wire
+# DATABASE_URL automatically, and expose the service at
+#   https://recoup-api.onrender.com
+#
+# Manually add secret env vars in the Render dashboard after first deploy:
+#   RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET, GEMINI_API_KEY
+services:
+  - type: web
+    name: recoup-api
+    runtime: python
+    rootDir: api
+    plan: free
+    healthCheckPath: /health
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: recoup-db
+          property: connectionString
+      - key: CORS_ORIGIN
+        value: https://recoup.vercel.app  # update after first Vercel deploy
+      - key: LLM_MODEL
+        value: gemini-2.0-flash
+      - key: RECOUP_OTEL_CONSOLE
+        value: "0"
+      # Secrets — set these manually in the dashboard, do not commit:
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+databases:
+  - name: recoup-db
+    plan: free
+    databaseName: recoup
+    user: recoup
