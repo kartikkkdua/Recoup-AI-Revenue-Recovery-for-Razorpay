@@ -399,26 +399,6 @@ cd api && pytest -q
 
 ---
 
-## What we'd build next (month-1 intern roadmap)
-
-1. **Deploy to Render + Vercel** with a stable HTTPS URL — see [DEPLOY.md](DEPLOY.md)
-2. **Redis-backed reliability primitives** — circuit breaker + rate limiter shared across replicas
-3. **Fine-tuned SLM classifier** — distill Gemini into local Phi-3-mini, remove external API from the money path
-4. **Playbook A/B testing framework** — 20% of failures get experimental variant, mSPRT already there to monitor
-5. **Real WhatsApp send** via Gupshup/MSG91 — currently stubbed (audit-only)
-6. **Merchant multi-tenancy** — real `merchant_id` on webhooks with per-merchant dashboards
-7. **Drift alerts → Slack webhook** — currently surfaces on dashboard, should also push
-
----
-
-## Not built (yet), and why
-
-- **No user auth / multi-tenancy** — single-merchant demo. Adding auth without a second merchant to demo is complexity for no story.
-- **No fancy animations or dark-mode toggle** — zero panel score.
-- **No hash-chained immutable audit log** — overkill for MVP; SQLite unique constraint on event id + WAL journaling gives us "add-only for the important reasons."
-
----
-
 ## Submission
 
 - Track: **AI Revenue Recovery**

@@ -17,7 +17,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          # 3.12 has full wheel coverage for scikit-learn 1.5.x + numpy 2.1.x
+          # on Linux; 3.13 needs sklearn ≥1.6 wheels which came later. Local
+          # dev + Render deploy still use 3.13 (runtime.txt).
+          python-version: "3.12"
           cache: pip
           cache-dependency-path: api/requirements.txt
       - name: Install
