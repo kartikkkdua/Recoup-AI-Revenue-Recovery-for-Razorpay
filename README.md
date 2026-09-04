@@ -16,9 +16,6 @@ and audited.
 Built for the **Razorpay AI Buildathon 2026** — Revenue Recovery track.
 
 - 📹 **Demo video (90s):** https://youtu.be/vq9s3slBu_0
-- 📄 **Pitch narrative:** [PITCH.md](PITCH.md)
-- 🎬 **Recording script:** [DEMO.md](DEMO.md)
-- 🚀 **Deploy in 15 min:** [DEPLOY.md](DEPLOY.md)
 
 > ![landing](docs/images/landing.png)
 > *Landing page — pulls live numbers from the API. Falls back to seed benchmark if backend is unreachable.*
@@ -275,7 +272,6 @@ Open `http://localhost:3000/dashboard`. Live SSE ticker top-of-page shows
 events processing in real time (~100/s on SQLite). Then visit `/impact` for
 the causal ATE + per-slice CATE.
 
-**Deploy to production** (Render + Vercel, ~15 min): see [DEPLOY.md](DEPLOY.md).
 
 ---
 
@@ -428,6 +424,3 @@ cd api && pytest -q
 - Track: **AI Revenue Recovery**
 - Author: Kartik Dua ([linkedin.com/in/kartikkkdua](https://linkedin.com/in/kartikkkdua))
 - Demo video: https://youtu.be/vq9s3slBu_0
-- Pitch narrative: [PITCH.md](PITCH.md)
-- Recording script: [DEMO.md](DEMO.md)
-- Deploy guide: [DEPLOY.md](DEPLOY.md)
