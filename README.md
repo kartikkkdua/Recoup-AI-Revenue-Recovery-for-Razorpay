@@ -1,6 +1,12 @@
 # Recoup — AI Revenue Recovery for Razorpay
 
 [![tests](https://github.com/kartikkkdua/Recoup-AI-Revenue-Recovery-for-Razorpay/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/kartikkkdua/Recoup-AI-Revenue-Recovery-for-Razorpay/actions/workflows/test.yml)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org)
+[![Next.js 14](https://img.shields.io/badge/Next.js-14-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![tests: 66](https://img.shields.io/badge/tests-66%20passing-brightgreen)](https://github.com/kartikkkdua/Recoup-AI-Revenue-Recovery-for-Razorpay/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Razorpay Buildathon 2026](https://img.shields.io/badge/Razorpay-Buildathon%202026-3395FF?logo=razorpay&logoColor=white)](https://razorpay.com/buildathon/)
 
 An autonomous agent that watches a Razorpay merchant's payment stream,
 classifies every failure, and executes the recovery playbook that actually
